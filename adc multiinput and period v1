@@ -13,6 +13,7 @@
 #define SYSCLK (24*MHZ)
 #define BAUDRATE 115200L
 #define zerocrosspin1 P1_0
+#define zerocrosspin2 P1_1
 unsigned char overflow_count;
 
 char _c51_external_startup (void)
@@ -123,6 +124,8 @@ void main (void)
 	float v;
 	unsigned char j;
 	float period;
+	float Tphase;
+	float phase;
 	PCA0MD &= ~0x40; // WDTE = 0 (clear watchdog timer enable)
 	_c51_external_startup();
 	TIMER0_Init();
@@ -195,7 +198,7 @@ void main (void)
 		while(zerocrosspin1!=0); // Wait for the signal to be zero
 		while(zerocrosspin1!=1); // Wait for the signal to be one
 		TR0=1; // Start the timer
-		while(zerocrosspin1!=0) // Wait for the signal to be zero
+		while(zerocrosspin2!=0) // Wait for the signal to be zero
 		{
 			if(TF0==1) // Did the 16-bit timer overflow?
 			{
@@ -203,7 +206,35 @@ void main (void)
 				overflow_count++;
 			}
 		}
-		while(zerocrosspin1!=1) // Wait for the signal to be one
+		while(zerocrosspin2!=1) // Wait for the signal to be one
+		{
+			if(TF0==1) // Did the 16-bit timer overflow?
+			{
+				TF0=0;
+				overflow_count++;
+			}
+		}
+
+		TR0=0; // Stop timer 0, the 24-bit number [overflow_count-TH0-TL0] has the period!
+		Tphase=(overflow_count*65536.0+TH0*256.0+TL0)*(12.0/SYSCLK);
+		
+		// Reset the counter
+		TL0=0; 
+		TH0=0;
+		TF0=0;
+		overflow_count=0;
+		while(zerocrosspin2!=0); // Wait for the signal to be zero
+		while(zerocrosspin2!=1); // Wait for the signal to be one
+		TR0=1; // Start the timer
+		while(zerocrosspin2!=0) // Wait for the signal to be zero
+		{
+			if(TF0==1) // Did the 16-bit timer overflow?
+			{
+				TF0=0;
+				overflow_count++;
+			}
+		}
+		while(zerocrosspin2!=1) // Wait for the signal to be one
 		{
 			if(TF0==1) // Did the 16-bit timer overflow?
 			{
@@ -214,10 +245,18 @@ void main (void)
 
 		TR0=0; // Stop timer 0, the 24-bit number [overflow_count-TH0-TL0] has the period!
 		period=(overflow_count*65536.0+TH0*256.0+TL0)*(12.0/SYSCLK);
+		
+		// Send the phase in t to the serial port
+		printf( "\rf=%fs" , Tphase);
+    
 		// Send the period to the serial port
 		printf( "\rf=%fs" , period);
-    
 
+    	phase= period/360*Tphase;
+		// Send the phase to the serial port
+		printf( "\rf=%fdegrees C" , phase);
+
+    	
 		printf("\x1B[K"); // ANSI escape sequence: Clear to end of line
 		waitms(100);  // Wait 100ms before next round of measurements.
 	 }  
