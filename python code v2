@@ -1,0 +1,88 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import sys, time, math
+import serial
+# configure the serial port
+ser = serial.Serial(
+ port='COM4',
+ baudrate=115200,
+ parity=serial.PARITY_NONE,
+ stopbits=serial.STOPBITS_TWO,
+ bytesize=serial.EIGHTBITS
+)
+ser.isOpen() 
+
+xsize=0.01
+   
+def data_gen():
+    t = data_gen.t
+    while True:
+       if t<0:
+           t=0.000    
+       t+=0.00025
+       strin1= ser.readline() #period
+       strin2= ser.readline() #phaseshift
+       strin3=ser.readline() #rms1
+       strin4=ser.readline() #rms2
+       period=float(strin1)
+       phaseshift=float(strin2)
+       rms1=float(strin3)
+       rms2=float(strin4)
+       val1=rms2*1.4142*math.sin(t*2.0*3.1415/period)
+       val2=rms1*1.4142*math.sin((t-phaseshift)*2.0*3.1415/period)
+       yield t,val1,val2,period,phaseshift,rms1,rms2
+
+
+def run(data):
+    # update the data
+    t,y1, y2, period,phaseshift,rmsvaluetest,rmsvalueref = data
+    if t>-1:
+        xdata.append(t)
+        ydata.append(y1)
+        ydata2.append(y2)
+        print "the phase shift is:", phaseshift
+        print "the period is:", period
+        peaktest=float(rmsvaluetest)*1.4142
+        peakref=float(rmsvalueref)*1.4142
+        print "peak value of test is:", peaktest
+        print "rms value of test is:", rmsvaluetest
+        print "peak value of reference is:", peakref
+        print "rms value of reference is:", rmsvalueref  
+        degreeshift=int(360*phaseshift/period)
+        print "phase shift in degrees is:",degreeshift
+        
+        plotval=float(y1)
+        plotval2=int(y2)
+        print plotval
+        line.set_data(xdata, ydata)
+        line2.set_data(xdata, ydata2)
+        if t>xsize: # Scroll to the left.
+            ax.set_xlim(t-xsize, t)
+
+        plt.plot([0, phaseshift], [0.001, 0.001])
+        plt.plot([period, period+phaseshift], [0.001, 0.001])
+        plt.plot([period*2, period*2+phaseshift], [0.001, 0.001])
+        plt.plot([period*3, period*3+phaseshift], [0.001, 0.001])
+        plt.plot([period*4, period*4+phaseshift], [0.001, 0.001])
+
+    return line,line2,
+
+def on_close_figure(event):
+    sys.exit(0)
+
+data_gen.t = -1
+fig = plt.figure()
+fig.canvas.mpl_connect('close_event', on_close_figure)
+ax = fig.add_subplot(111)
+line, = ax.plot([], [], lw=2)
+line2, = ax.plot([], [], lw=2)
+ax.set_ylim(-4, 4)
+ax.set_xlim(0, xsize)
+ax.grid()
+xdata, ydata,ydata2 = [], [],[]
+
+# Important: Although blit=True makes graphing faster, we need blit=False to prevent
+# spurious lines to appear when resizing the stripchart.
+ani = animation.FuncAnimation(fig, run, data_gen, blit=False, interval=100, repeat=False)
+plt.show()
